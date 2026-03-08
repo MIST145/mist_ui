@@ -8,6 +8,24 @@ local strings = {"<script","<img","<svg","<style","<link","<iframe","<video","<a
 RegisterNUICallback("hudLoaded", function()
     hudLoaded = true
     SendNUIMessage({ type = "loadhud" })
+
+    -- Restore saved UI positions after HUD is built
+    local keys = { "notify", "progressbar", "helpnotify", "announce" }
+    local positions = {}
+    local hasAny = false
+
+    for _, key in ipairs(keys) do
+        local left = GetResourceKvpString("ui_pos_" .. key .. "_left")
+        local top  = GetResourceKvpString("ui_pos_" .. key .. "_top")
+        if left and top then
+            positions[key] = { left = left, top = top }
+            hasAny = true
+        end
+    end
+
+    if hasAny then
+        SendNUIMessage({ type = "setPositions", data = positions })
+    end
 end)
 
 -- // Sound callback \\ --
@@ -21,6 +39,44 @@ RegisterNUICallback("sound", function(data)
             1)
     end
 end)
+
+-- // Save UI Positions callback (called when player saves from editor) \\ --
+RegisterNUICallback("savePositions", function(data, cb)
+    if type(data) == "table" then
+        for key, pos in pairs(data) do
+            if pos.left and pos.top then
+                SetResourceKvp("ui_pos_" .. key .. "_left", pos.left)
+                SetResourceKvp("ui_pos_" .. key .. "_top",  pos.top)
+            end
+        end
+    end
+    cb("ok")
+end)
+
+-- // Close Edit callback (called on both save and cancel) \\ --
+RegisterNUICallback("closeEdit", function(data, cb)
+    SetNuiFocus(false, false)
+    cb("ok")
+end)
+
+-- // /ui_edit — opens the UI position editor \\ --
+RegisterCommand("ui_edit", function()
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        type = "editMode",
+        data = { state = true }
+    })
+end, false)
+
+-- // /ui_reset — resets all positions back to default \\ --
+RegisterCommand("ui_reset", function()
+    local keys = { "notify", "progressbar", "helpnotify", "announce" }
+    for _, key in ipairs(keys) do
+        DeleteResourceKvp("ui_pos_" .. key .. "_left")
+        DeleteResourceKvp("ui_pos_" .. key .. "_top")
+    end
+    TriggerEvent(cl_config.general.prime_events["prime_notify"], "success", "UI Reset", "Posições restauradas para o padrão.", 4000)
+end, false)
 
 -- // Events \\ --
 
