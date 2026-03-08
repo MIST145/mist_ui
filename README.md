@@ -19,9 +19,9 @@ Versão simplificada do prime_hud — mantém apenas:
 
 ```lua
 -- Notify
-exports["mist_ui"]:notify("info", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("info",    "Título", "Mensagem", 5000)
 exports["mist_ui"]:notify("success", "Título", "Mensagem", 5000)
-exports["mist_ui"]:notify("error", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("error",   "Título", "Mensagem", 5000)
 exports["mist_ui"]:notify("warning", "Título", "Mensagem", 5000)
 
 -- Progressbar
@@ -38,11 +38,25 @@ exports["mist_ui"]:helpnotify("E", "Para abrir a porta")
 ## Eventos (alternativa aos exports)
 
 ```lua
-TriggerEvent("mist_ui",        "info", "Título", "Mensagem", 5000)
-TriggerEvent("mist_progressbar",   "A carregar...", 5000)
-TriggerEvent("prime_progressbar:cancel")
-TriggerEvent("prime_announce",     "TÍTULO", "Mensagem", 5000)
-TriggerEvent("prime_helpnotify",   "E", "Para abrir a porta")
+TriggerEvent("mist_ui:notify",             "info", "Título", "Mensagem", 5000)
+TriggerEvent("mist_ui:progressbar",        "A carregar...", 5000)
+TriggerEvent("mist_ui:progressbar:cancel")
+TriggerEvent("mist_ui:announce",           "TÍTULO", "Mensagem", 5000)
+TriggerEvent("mist_ui:helpnotify",         "E", "Para abrir a porta")
+```
+
+## Editor de posições
+
+Usa `/ui_edit` em jogo para abrir o editor visual de posições do HUD.  
+Usa `/ui_reset` para restaurar todas as posições para o padrão.
+
+### Permissões para /announce
+
+**Com ESX:** configura os grupos em `config/sv_config.lua` → `sv_config.announce.groups`
+
+**Sem ESX:** adiciona ao teu `server.cfg`:
+```
+add_ace group.admin mist_ui.announce allow
 ```
 
 ## Ficheiros que tens de copiar do prime_hud original
