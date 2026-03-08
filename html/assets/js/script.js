@@ -10,6 +10,7 @@ let activeEditKey  = null;
 let isDragging     = false;
 let dragOffsetX    = 0;
 let dragOffsetY    = 0;
+let editedKeys     = new Set(); // tracks which elements were positioned this session
 
 const EDIT_SELECTORS = {
     notify:      '.notifys-container',
@@ -117,6 +118,7 @@ function activateEditMode() {
     editModeActive = true;
     activeEditKey  = null;
     isDragging     = false;
+    editedKeys     = new Set();
     showEditPanel();
 }
 
@@ -143,6 +145,8 @@ function deactivateEditMode(save) {
     if (save) {
         const positions = {};
         for (const key in EDIT_SELECTORS) {
+            // Only save elements that were actually selected and converted this session
+            if (!editedKeys.has(key)) continue;
             const el = document.querySelector(EDIT_SELECTORS[key]);
             if (el) {
                 const rect = el.getBoundingClientRect();
@@ -152,7 +156,9 @@ function deactivateEditMode(save) {
                 };
             }
         }
-        $.post(`https://${GetParentResourceName()}/savePositions`, JSON.stringify(positions));
+        if (Object.keys(positions).length > 0) {
+            $.post(`https://${GetParentResourceName()}/savePositions`, JSON.stringify(positions));
+        }
     }
 
     $.post(`https://${GetParentResourceName()}/closeEdit`);
@@ -362,6 +368,7 @@ function convertElementToAbsolute(key) {
         right:     'auto',
         transform: 'none'
     });
+    editedKeys.add(key);
 }
 
 // ── Setup drag on a specific element ─────────────────────────────────────────
