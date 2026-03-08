@@ -4,6 +4,20 @@ let notifyCount = 1;
 let currentlyAnnouncing = false;
 const announcementQueue = [];
 
+// ── Edit Mode State ───────────────────────────────────────────────────────────
+let editModeActive = false;
+let activeEditKey  = null;
+let isDragging     = false;
+let dragOffsetX    = 0;
+let dragOffsetY    = 0;
+
+const EDIT_SELECTORS = {
+    notify:      '.notifys-container',
+    progressbar: '.progress-bar',
+    helpnotify:  '.help-notify',
+    announce:    '.announces'
+};
+
 // ── Avisa o client que a página está pronta ───────────────────────────────────
 $(document).ready(function () {
     $.post(`https://${GetParentResourceName()}/hudLoaded`);
@@ -22,27 +36,52 @@ window.addEventListener('message', function (event) {
             break;
         }
 
+        case "editMode": {
+            if (data.data && data.data.state) {
+                activateEditMode();
+            } else {
+                deactivateEditMode(false);
+            }
+            break;
+        }
+
+        case "setPositions": {
+            if (data.data) {
+                applyAllPositions(data.data);
+            }
+            break;
+        }
+
         case "progressbar": {
-            startProgressbar(data.data.text, data.data.time);
+            if (!editModeActive) {
+                startProgressbar(data.data.text, data.data.time);
+            }
             break;
         }
 
         case "progressbar:cancel": {
-            cancelProgressbar();
+            if (!editModeActive) {
+                cancelProgressbar();
+            }
             break;
         }
 
         case "notify": {
-            notify(data.data.type, data.data.title, data.data.msg, data.data.time, data.data.icon);
+            if (!editModeActive) {
+                notify(data.data.type, data.data.title, data.data.msg, data.data.time, data.data.icon);
+            }
             break;
         }
 
         case "announce": {
-            announce(data.data.title, data.data.msg, data.data.time);
+            if (!editModeActive) {
+                announce(data.data.title, data.data.msg, data.data.time);
+            }
             break;
         }
 
         case "helpNotify": {
+            if (editModeActive) break;
             if (!data.data.show) {
                 $('.help-notify').fadeOut(400);
             } else {
@@ -62,12 +101,326 @@ window.addEventListener('message', function (event) {
     }
 });
 
-// ── Escape closes any open UI element ────────────────────────────────────────
+// ── Escape key ────────────────────────────────────────────────────────────────
 window.addEventListener("keyup", (event) => {
     if (event.key === "Escape") {
-        $.post(`https://${GetParentResourceName()}/close`);
+        if (editModeActive) {
+            deactivateEditMode(false);
+        } else {
+            $.post(`https://${GetParentResourceName()}/close`);
+        }
     }
 });
+
+// ── Edit Mode — Activate ──────────────────────────────────────────────────────
+function activateEditMode() {
+    editModeActive = true;
+    activeEditKey  = null;
+    isDragging     = false;
+    showEditPanel();
+}
+
+// ── Edit Mode — Deactivate ────────────────────────────────────────────────────
+function deactivateEditMode(save) {
+    if (activeEditKey) {
+        removePreview(activeEditKey);
+        removeEditBorder(activeEditKey);
+        $(EDIT_SELECTORS[activeEditKey]).off('mousedown.editdrag').css('cursor', '');
+        activeEditKey = null;
+    }
+
+    $('#ui-edit-panel').remove();
+
+    // Hide elements that should normally be hidden when not in use
+    if (!progressBar) {
+        $('.progress-bar').hide();
+    }
+    $('.help-notify').hide();
+
+    isDragging     = false;
+    editModeActive = false;
+
+    if (save) {
+        const positions = {};
+        for (const key in EDIT_SELECTORS) {
+            const el = document.querySelector(EDIT_SELECTORS[key]);
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                positions[key] = {
+                    left: ((rect.left / window.innerWidth)  * 100).toFixed(4) + '%',
+                    top:  ((rect.top  / window.innerHeight) * 100).toFixed(4) + '%'
+                };
+            }
+        }
+        $.post(`https://${GetParentResourceName()}/savePositions`, JSON.stringify(positions));
+    }
+
+    $.post(`https://${GetParentResourceName()}/closeEdit`);
+}
+
+// ── Edit Panel ────────────────────────────────────────────────────────────────
+function showEditPanel() {
+    if ($('#ui-edit-panel').length > 0) return;
+
+    $('.hud').append(`
+        <div id="ui-edit-panel">
+            <div class="uep-header">
+                <div class="uep-header-icon">⚙</div>
+                <div class="uep-header-text">
+                    <p class="uep-title">UI POSITION EDITOR</p>
+                    <p class="uep-subtitle">Seleciona um elemento para mover</p>
+                </div>
+            </div>
+            <div class="uep-divider"></div>
+            <div class="uep-list">
+                <div class="uep-item" id="uep-btn-notify" data-key="notify">
+                    <div class="uep-item-indicator"></div>
+                    <span class="uep-item-label">NOTIFICATIONS</span>
+                    <span class="uep-item-arrow">›</span>
+                </div>
+                <div class="uep-item" id="uep-btn-progressbar" data-key="progressbar">
+                    <div class="uep-item-indicator"></div>
+                    <span class="uep-item-label">PROGRESSBAR</span>
+                    <span class="uep-item-arrow">›</span>
+                </div>
+                <div class="uep-item" id="uep-btn-helpnotify" data-key="helpnotify">
+                    <div class="uep-item-indicator"></div>
+                    <span class="uep-item-label">HELP NOTIFY</span>
+                    <span class="uep-item-arrow">›</span>
+                </div>
+                <div class="uep-item" id="uep-btn-announce" data-key="announce">
+                    <div class="uep-item-indicator"></div>
+                    <span class="uep-item-label">ANNOUNCE</span>
+                    <span class="uep-item-arrow">›</span>
+                </div>
+            </div>
+            <div class="uep-divider"></div>
+            <div class="uep-hint">
+                <span class="uep-hint-key">ESC</span>
+                <span class="uep-hint-text">para cancelar</span>
+            </div>
+            <div class="uep-footer">
+                <div class="uep-save" id="uep-save">✓ GUARDAR & FECHAR</div>
+                <div class="uep-cancel" id="uep-cancel">✕ CANCELAR</div>
+            </div>
+        </div>
+    `);
+
+    $('.uep-item').on('click', function () {
+        const key = $(this).data('key');
+        selectEditComponent(key);
+    });
+
+    $('#uep-save').on('click', function () {
+        deactivateEditMode(true);
+    });
+
+    $('#uep-cancel').on('click', function () {
+        deactivateEditMode(false);
+    });
+}
+
+// ── Select a component in edit mode ──────────────────────────────────────────
+function selectEditComponent(key) {
+    // Deselect previous if different
+    if (activeEditKey && activeEditKey !== key) {
+        removePreview(activeEditKey);
+        removeEditBorder(activeEditKey);
+        $(EDIT_SELECTORS[activeEditKey]).off('mousedown.editdrag').css('cursor', '');
+        $(`#uep-btn-${activeEditKey}`).removeClass('uep-item-active');
+    }
+
+    // Toggle off if clicking the same
+    if (activeEditKey === key) {
+        removePreview(key);
+        removeEditBorder(key);
+        $(EDIT_SELECTORS[key]).off('mousedown.editdrag').css('cursor', '');
+        $(`#uep-btn-${key}`).removeClass('uep-item-active');
+        activeEditKey = null;
+        return;
+    }
+
+    activeEditKey = key;
+    $(`#uep-btn-${key}`).addClass('uep-item-active');
+
+    showPreview(key);
+    convertElementToAbsolute(key);
+    addEditBorder(key);
+    setupDrag(key);
+}
+
+// ── Show preview content for the selected element ────────────────────────────
+function showPreview(key) {
+    switch (key) {
+        case 'notify': {
+            if ($('.edit-preview-notify').length === 0) {
+                $('.notifys-container').append(`
+                    <div class="notify-container edit-preview-notify">
+                        <div class="notify-progress">
+                            <div class="progress-info-fill" style="height:60%"></div>
+                        </div>
+                        <div class="notify-con">
+                            <iconify-icon icon="ep:info-filled" class="notify-icon-ify-info" width="1.25vw" height="2.22vh"></iconify-icon>
+                            <p class="notify-title-info">NOTIFICAÇÃO</p>
+                            <p class="notify-txt">Exemplo de notificação de informação</p>
+                        </div>
+                    </div>
+                `);
+            }
+            break;
+        }
+        case 'progressbar': {
+            $('.progress-bar').show();
+            $('.progress-txt').text('Exemplo de progressbar...');
+            $('.progress-bar-fill').css('width', '60%');
+            $('.progress-percent').text('60%');
+            break;
+        }
+        case 'helpnotify': {
+            $('.help-notify').show();
+            $('.help_text').text('Para interagir com o objeto');
+            $('.key').text('E');
+            break;
+        }
+        case 'announce': {
+            if ($('.edit-preview-announce').length === 0) {
+                $('.announces').append(`
+                    <div class="announce-box edit-preview-announce">
+                        <div class="announce-shadow"></div>
+                        <img class="announce-icon" src="./assets/img/info-announce.svg">
+                        <div class="title-strich">
+                            <div class="announce-strich-left">
+                                <div class="strich-announce" style="transform:rotate(155deg)"></div>
+                                <div class="strich-announce" style="transform:rotate(155deg)"></div>
+                                <div class="strich-announce" style="opacity:.72;transform:rotate(155deg)"></div>
+                                <div class="strich-announce" style="opacity:.48;transform:rotate(155deg)"></div>
+                                <div class="strich-announce" style="opacity:.16;transform:rotate(155deg)"></div>
+                            </div>
+                            <p class="announce-title">EXEMPLO</p>
+                            <div class="announce-strich-left" style="right:-1.16vw">
+                                <div class="strich-announce" style="opacity:.16"></div>
+                                <div class="strich-announce" style="opacity:.48"></div>
+                                <div class="strich-announce" style="opacity:.72"></div>
+                                <div class="strich-announce"></div>
+                                <div class="strich-announce"></div>
+                            </div>
+                        </div>
+                        <p class="announce-msg">Mensagem de announce de exemplo para posicionamento</p>
+                        <div class="announce-progress">
+                            <div class="announce-progress-fill" style="width:50%"></div>
+                        </div>
+                    </div>
+                `);
+            }
+            break;
+        }
+    }
+}
+
+// ── Remove preview content ────────────────────────────────────────────────────
+function removePreview(key) {
+    switch (key) {
+        case 'notify':
+            $('.edit-preview-notify').remove();
+            break;
+        case 'progressbar':
+            if (!progressBar) {
+                $('.progress-bar').hide();
+                $('.progress-bar-fill').css('width', '0%');
+            }
+            break;
+        case 'helpnotify':
+            $('.help-notify').hide();
+            break;
+        case 'announce':
+            $('.edit-preview-announce').remove();
+            break;
+    }
+}
+
+// ── Add / remove edit border ──────────────────────────────────────────────────
+function addEditBorder(key) {
+    $(EDIT_SELECTORS[key]).addClass('ui-edit-active');
+    $(EDIT_SELECTORS[key]).css('cursor', 'grab');
+}
+
+function removeEditBorder(key) {
+    $(EDIT_SELECTORS[key]).removeClass('ui-edit-active');
+    $(EDIT_SELECTORS[key]).css('cursor', '');
+}
+
+// ── Convert element from bottom/transform positioning to top/left ─────────────
+function convertElementToAbsolute(key) {
+    const el = document.querySelector(EDIT_SELECTORS[key]);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    $(el).css({
+        position:  'absolute',
+        top:       rect.top  + 'px',
+        left:      rect.left + 'px',
+        bottom:    'auto',
+        right:     'auto',
+        transform: 'none'
+    });
+}
+
+// ── Setup drag on a specific element ─────────────────────────────────────────
+function setupDrag(key) {
+    const el = $(EDIT_SELECTORS[key]);
+    el.off('mousedown.editdrag');
+    el.on('mousedown.editdrag', function (e) {
+        if (!editModeActive || activeEditKey !== key) return;
+        // Ignore clicks on the edit panel itself
+        if ($(e.target).closest('#ui-edit-panel').length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        isDragging  = true;
+        const rect  = this.getBoundingClientRect();
+        dragOffsetX = e.clientX - rect.left;
+        dragOffsetY = e.clientY - rect.top;
+        $(this).css('cursor', 'grabbing');
+    });
+}
+
+// ── Global mouse move handler ─────────────────────────────────────────────────
+document.addEventListener('mousemove', function (e) {
+    if (!isDragging || !activeEditKey) return;
+    const el = document.querySelector(EDIT_SELECTORS[activeEditKey]);
+    if (!el) return;
+
+    const elWidth  = el.offsetWidth;
+    const elHeight = el.offsetHeight;
+
+    const newLeft = Math.max(0, Math.min(window.innerWidth  - elWidth,  e.clientX - dragOffsetX));
+    const newTop  = Math.max(0, Math.min(window.innerHeight - elHeight, e.clientY - dragOffsetY));
+
+    $(el).css({ left: newLeft + 'px', top: newTop + 'px' });
+});
+
+// ── Global mouse up handler ───────────────────────────────────────────────────
+document.addEventListener('mouseup', function () {
+    if (isDragging && activeEditKey) {
+        $(EDIT_SELECTORS[activeEditKey]).css('cursor', 'grab');
+    }
+    isDragging = false;
+});
+
+// ── Apply all positions received from Lua (on resource start) ────────────────
+function applyAllPositions(positions) {
+    for (const key in positions) {
+        if (!EDIT_SELECTORS[key] || !positions[key]) continue;
+        const el = $(EDIT_SELECTORS[key]);
+        if (!el.length) continue;
+        el.css({
+            position:  'absolute',
+            top:       positions[key].top,
+            left:      positions[key].left,
+            bottom:    'auto',
+            right:     'auto',
+            transform: 'none'
+        });
+    }
+}
 
 // ── notify ────────────────────────────────────────────────────────────────────
 function notify(type, title, msg, time, icon) {
@@ -158,7 +511,7 @@ function startProgressbar(text, time) {
     $('.progress-bar-fill').css("width", "0%");
     $('.progress-percent').text("0%");
 
-    const start = Date.now();
+    const start    = Date.now();
     const interval = 10;
 
     progressBar = setInterval(() => {
@@ -228,6 +581,199 @@ function loadhtml() {
         .announce-strich-left{position:relative;display:flex;align-items:flex-start;width:2.8vw;top:.99vw}
         .strich-announce{position:relative;width:.21vw;height:1.25vw;margin-right:.16vw;transform:rotate(-155deg);border-radius:.05vw;background:var(--announce-lines);box-shadow:0vw 0vw .42vw 0vw var(--announce-lines-shadow)}
         .announce-icon{position:absolute;width:6.67vw;height:6.67vw;left:50%;transform:translateX(-50%)}
+
+        /* ── edit mode: active element highlight ── */
+        .ui-edit-active {
+            outline:        0.13vw dashed rgba(49, 181, 255, 0.85) !important;
+            outline-offset: 0.6vw !important;
+            border-radius:  0.42vw !important;
+        }
+
+        /* ── UI Edit Panel ── */
+        #ui-edit-panel {
+            position:         absolute;
+            top:              50%;
+            right:            1.25vw;
+            transform:        translateY(-50%);
+            width:            13.5vw;
+            background:       rgba(4, 12, 30, 0.96);
+            border:           0.06vw solid rgba(49, 181, 255, 0.25);
+            border-radius:    0.73vw;
+            box-shadow:       0 0 2.5vw rgba(0, 0, 0, 0.6), 0 0 1vw rgba(49, 181, 255, 0.08);
+            z-index:          9999;
+            overflow:         hidden;
+            pointer-events:   all;
+        }
+        .uep-header {
+            display:     flex;
+            align-items: center;
+            gap:         0.63vw;
+            padding:     0.83vw 0.9vw 0.73vw;
+        }
+        .uep-header-icon {
+            font-size:   0.83vw;
+            color:       rgba(49, 181, 255, 0.9);
+            line-height: 1 !important;
+            flex-shrink: 0;
+        }
+        .uep-header-text {
+            display:        flex;
+            flex-direction: column;
+            gap:            0.18vw;
+        }
+        .uep-title {
+            color:          #ffffff;
+            font-family:    "Gilroy-Bold";
+            font-size:      0.67vw;
+            font-weight:    700;
+            letter-spacing: 0.09vw;
+            line-height:    1.3 !important;
+            text-transform: uppercase;
+        }
+        .uep-subtitle {
+            color:       rgba(255, 255, 255, 0.4);
+            font-family: "Gilroy-Medium";
+            font-size:   0.5vw;
+            line-height: 1.3 !important;
+        }
+        .uep-divider {
+            height:     0.05vw;
+            background: rgba(255, 255, 255, 0.07);
+            margin:     0;
+        }
+        .uep-list {
+            padding: 0.42vw 0;
+        }
+        .uep-item {
+            display:     flex;
+            align-items: center;
+            gap:         0.63vw;
+            padding:     0.6vw 0.9vw;
+            cursor:      pointer;
+            transition:  background 0.12s;
+            position:    relative;
+        }
+        .uep-item:hover {
+            background: rgba(49, 181, 255, 0.07);
+        }
+        .uep-item:hover .uep-item-indicator {
+            background: rgba(49, 181, 255, 0.5);
+        }
+        .uep-item:hover .uep-item-arrow {
+            opacity: 0.7;
+            right:   0.73vw;
+        }
+        .uep-item-active {
+            background: rgba(49, 181, 255, 0.12) !important;
+        }
+        .uep-item-active .uep-item-indicator {
+            background: rgba(49, 181, 255, 1) !important;
+            box-shadow: 0 0 0.42vw rgba(49, 181, 255, 0.7) !important;
+        }
+        .uep-item-active .uep-item-label {
+            color: #ffffff !important;
+        }
+        .uep-item-active .uep-item-arrow {
+            opacity: 1 !important;
+            color:   rgba(49, 181, 255, 1) !important;
+            right:   0.73vw !important;
+        }
+        .uep-item-indicator {
+            width:        0.35vw;
+            height:       0.35vw;
+            border-radius: 50%;
+            background:   rgba(255, 255, 255, 0.2);
+            flex-shrink:  0;
+            transition:   background 0.12s, box-shadow 0.12s;
+            line-height:  1 !important;
+        }
+        .uep-item-label {
+            color:          rgba(255, 255, 255, 0.65);
+            font-family:    "Gilroy-SemiBold";
+            font-size:      0.6vw;
+            font-weight:    600;
+            letter-spacing: 0.07vw;
+            line-height:    1.3 !important;
+            text-transform: uppercase;
+            flex:           1;
+            transition:     color 0.12s;
+        }
+        .uep-item-arrow {
+            color:      rgba(255, 255, 255, 0.2);
+            font-size:  0.73vw;
+            line-height: 1 !important;
+            position:   absolute;
+            right:      0.83vw;
+            transition: opacity 0.12s, right 0.12s, color 0.12s;
+        }
+        .uep-hint {
+            display:         flex;
+            align-items:     center;
+            justify-content: center;
+            gap:             0.42vw;
+            padding:         0.42vw 0.9vw;
+        }
+        .uep-hint-key {
+            background:     rgba(255, 255, 255, 0.08);
+            border:         0.05vw solid rgba(255, 255, 255, 0.15);
+            border-radius:  0.21vw;
+            color:          rgba(255, 255, 255, 0.5);
+            font-family:    "Gilroy-SemiBold";
+            font-size:      0.46vw;
+            padding:        0.15vw 0.35vw;
+            line-height:    1.4 !important;
+            letter-spacing: 0.04vw;
+        }
+        .uep-hint-text {
+            color:       rgba(255, 255, 255, 0.3);
+            font-family: "Gilroy-Medium";
+            font-size:   0.48vw;
+            line-height: 1.3 !important;
+        }
+        .uep-footer {
+            border-top:     0.05vw solid rgba(255, 255, 255, 0.07);
+            padding:        0.63vw;
+            display:        flex;
+            flex-direction: column;
+            gap:            0.35vw;
+        }
+        .uep-save {
+            background:     rgba(49, 181, 255, 0.18);
+            border:         0.06vw solid rgba(49, 181, 255, 0.4);
+            color:          rgba(49, 181, 255, 1);
+            font-family:    "Gilroy-SemiBold";
+            font-size:      0.56vw;
+            font-weight:    600;
+            letter-spacing: 0.06vw;
+            text-transform: uppercase;
+            text-align:     center;
+            padding:        0.52vw;
+            border-radius:  0.35vw;
+            cursor:         pointer;
+            line-height:    1.4 !important;
+            transition:     background 0.12s, border-color 0.12s;
+        }
+        .uep-save:hover {
+            background:   rgba(49, 181, 255, 0.28);
+            border-color: rgba(49, 181, 255, 0.7);
+        }
+        .uep-cancel {
+            color:          rgba(255, 255, 255, 0.3);
+            font-family:    "Gilroy-Medium";
+            font-size:      0.5vw;
+            text-transform: uppercase;
+            text-align:     center;
+            padding:        0.42vw;
+            border-radius:  0.31vw;
+            cursor:         pointer;
+            line-height:    1.4 !important;
+            letter-spacing: 0.04vw;
+            transition:     color 0.12s, background 0.12s;
+        }
+        .uep-cancel:hover {
+            color:      rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.04);
+        }
 
         /* ── animations ── */
         @keyframes fadeIn{0%{left:-20.83vw;opacity:0}100%{left:0;opacity:1}}
