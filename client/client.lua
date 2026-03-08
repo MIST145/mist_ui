@@ -1,15 +1,22 @@
 -- // locals \\ --
-local hudLoaded  = false
-local helpTimer  = 0
+local hudLoaded   = false
+local helpTimer   = 0
+local helpShowing = false  -- single flag instead of per-call threads
 
 local strings = {"<script","<img","<svg","<style","<link","<iframe","<video","<audio","<body","<head","<html"}
 
 -- // HUD loaded callback \\ --
+-- Apenas envia loadhud. As posições são restauradas em hudReady,
+-- que só é chamado depois do DOM estar completamente construído.
 RegisterNUICallback("hudLoaded", function(data, cb)
     hudLoaded = true
     SendNUIMessage({ type = "loadhud" })
+    cb("ok")
+end)
 
-    -- Restore saved UI positions after HUD is built
+-- // HUD ready callback — chamado pelo JS após loadhtml() estar completo \\ --
+-- FIX: race condition — setPositions chegava antes do DOM estar pronto.
+RegisterNUICallback("hudReady", function(data, cb)
     local keys = { "notify", "progressbar", "helpnotify", "announce" }
     local positions = {}
     local hasAny = false
@@ -43,13 +50,13 @@ RegisterNUICallback("sound", function(data, cb)
     cb("ok")
 end)
 
--- // Close NUI callback (called when ESC pressed outside edit mode) \\ --
+-- // Close NUI callback (ESC fora do modo de edição) \\ --
 RegisterNUICallback("close", function(data, cb)
     SetNuiFocus(false, false)
     cb("ok")
 end)
 
--- // Save UI Positions callback (called when player saves from editor) \\ --
+-- // Save UI Positions callback \\ --
 RegisterNUICallback("savePositions", function(data, cb)
     if type(data) == "table" then
         for key, pos in pairs(data) do
@@ -62,13 +69,13 @@ RegisterNUICallback("savePositions", function(data, cb)
     cb("ok")
 end)
 
--- // Close Edit callback (called on both save and cancel) \\ --
+-- // Close Edit callback \\ --
 RegisterNUICallback("closeEdit", function(data, cb)
     SetNuiFocus(false, false)
     cb("ok")
 end)
 
--- // /ui_edit — opens the UI position editor \\ --
+-- // /ui_edit \\ --
 RegisterCommand("ui_edit", function()
     SetNuiFocus(true, true)
     SendNUIMessage({
@@ -77,7 +84,7 @@ RegisterCommand("ui_edit", function()
     })
 end, false)
 
--- // /ui_reset — resets all positions back to default \\ --
+-- // /ui_reset \\ --
 RegisterCommand("ui_reset", function()
     local keys = { "notify", "progressbar", "helpnotify", "announce" }
     for _, key in ipairs(keys) do
@@ -89,21 +96,28 @@ end, false)
 
 -- // Events \\ --
 
+-- FIX: thread leak — em vez de criar uma nova thread por cada chamada,
+-- existe uma única thread persistente que verifica o timer.
+-- O event handler apenas atualiza o timer e envia o estado para a NUI.
 RegisterNetEvent(cl_config.general.prime_events["prime_helpnotify"])
 AddEventHandler(cl_config.general.prime_events["prime_helpnotify"], function(key, text)
     if not checkString({ text or "not defined" }) then return end
-
-    -- Renova o timer a cada chamada
-    helpTimer = GetGameTimer()
+    helpTimer   = GetGameTimer()
+    helpShowing = true
     sendData("helpNotify", { show = true, key = key or "E", text = text or "not defined" })
+end)
 
-    -- Só esconde se passarem 600ms sem nova chamada
-    Citizen.CreateThread(function()
-        Wait(600)
-        if GetGameTimer() - helpTimer >= 600 then
+-- // Thread único persistente para helpnotify \\ --
+-- Verifica a cada 100ms se o helpnotify deve ser escondido.
+-- Substitui o padrão anterior de criar uma thread por chamada de evento.
+Citizen.CreateThread(function()
+    while true do
+        Wait(100)
+        if helpShowing and GetGameTimer() - helpTimer >= 600 then
+            helpShowing = false
             sendData("helpNotify", { show = false })
         end
-    end)
+    end
 end)
 
 RegisterNetEvent(cl_config.general.prime_events["prime_progressbar"])
@@ -180,4 +194,4 @@ exports('announce', function(title, msg, time)
 end)
 
 -- // Print \\ --
-print("^0[^5Mist-Notify^0] ^2Script started!^0")
+print("^0[^5Mist-UI^0] ^2Client started!^0")
