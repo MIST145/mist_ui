@@ -5,7 +5,7 @@ local helpTimer  = 0
 local strings = {"<script","<img","<svg","<style","<link","<iframe","<video","<audio","<body","<head","<html"}
 
 -- // HUD loaded callback \\ --
-RegisterNUICallback("hudLoaded", function()
+RegisterNUICallback("hudLoaded", function(data, cb)
     hudLoaded = true
     SendNUIMessage({ type = "loadhud" })
 
@@ -26,10 +26,12 @@ RegisterNUICallback("hudLoaded", function()
     if hasAny then
         SendNUIMessage({ type = "setPositions", data = positions })
     end
+
+    cb("ok")
 end)
 
 -- // Sound callback \\ --
-RegisterNUICallback("sound", function(data)
+RegisterNUICallback("sound", function(data, cb)
     if string.lower(cl_config[data.type].sound.type) == "custom" then
         sendData("send-sound", { sound = cl_config[data.type].sound["custom"].sound })
     elseif string.lower(cl_config[data.type].sound.type) == "fivem" then
@@ -38,6 +40,13 @@ RegisterNUICallback("sound", function(data)
             cl_config[data.type].sound["fivem"].sound.soundSetName,
             1)
     end
+    cb("ok")
+end)
+
+-- // Close NUI callback (called when ESC pressed outside edit mode) \\ --
+RegisterNUICallback("close", function(data, cb)
+    SetNuiFocus(false, false)
+    cb("ok")
 end)
 
 -- // Save UI Positions callback (called when player saves from editor) \\ --
