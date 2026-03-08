@@ -1,0 +1,33 @@
+:root {
+    /* notifys */
+    --notify-background-color: rgba(3, 15, 33, 0.48);
+    --notify-box-shadow: rgba(0, 0, 0, 0.32);
+
+    /* error */
+    --notify-type-error: #ED254E;
+    --notify-type-error-progress: rgba(237, 37, 78, 0.80);
+
+    /* success */
+    --notify-type-success: #7DDE29;
+    --notify-type-success-progress: rgba(125, 222, 41, 0.80);
+
+    /* info */
+    --notify-type-info: #1425e6;
+    --notify-type-info-progress: #1425e6;
+
+    /* warning */
+    --notify-type-warning: #FF820E;
+    --notify-type-warning-progress: rgba(255, 130, 14, 0.80);
+
+    /* announce */
+    --announce-lines: #31B5FF;
+    --announce-lines-shadow: rgba(49, 181, 255, 0.32);
+    --announce-title: #31B5FF;
+    --announce-title-shadow: rgba(49, 181, 255, 0.64);
+    --announce-progress-fill: #31B5FF;
+    --announce-progress-box-shadow: rgba(49, 181, 255, 0.32);
+
+    /* progressbar */
+    --progressbar-color: #1425e6;
+    --progressbar-color-box-shadow: rgba(1, 4, 69, 0.32);
+}
