@@ -1,11 +1,43 @@
-local ESX      = nil
+-- // FIX: ESX como dependência opcional \\
+-- Se es_extended não estiver presente, o resource não crasha.
+-- O comando /announce usa IsPlayerAceAllowed como fallback.
+local ESX    = nil
+local hasESX = false
+
+local ok = pcall(function()
+    ESX    = exports["es_extended"]:getSharedObject()
+    hasESX = ESX ~= nil
+end)
+
+if not hasESX then
+    -- Fallback: tentar via evento (compatível com versões mais antigas de ESX)
+    AddEventHandler(sv_config.general.esx_events["esx:getSharedObject"], function(obj)
+        ESX    = obj
+        hasESX = true
+    end)
+    TriggerEvent(sv_config.general.esx_events["esx:getSharedObject"], function(obj)
+        ESX    = obj
+        hasESX = true
+    end)
+end
+
 local language = sv_config.language[cl_config.general.language]
 
--- // get ESX \\ --
-if exports["es_extended"]:getSharedObject() then
-    ESX = exports["es_extended"]:getSharedObject()
-else
-    TriggerEvent(sv_config.general.esx_events["esx:getSharedObject"], function(obj) ESX = obj end)
+-- // Função auxiliar: verificar grupo/permissão do jogador \\ --
+-- Com ESX: verifica getGroup() contra sv_config.announce.groups
+-- Sem ESX: verifica ace permission "mist_ui.announce" (configurável no server.cfg)
+local function playerHasAnnouncePermission(src)
+    if hasESX and ESX then
+        local xPlayer = ESX.GetPlayerFromId(src)
+        if xPlayer then
+            return sv_config.announce.groups[xPlayer.getGroup()] == true
+        end
+        return false
+    else
+        -- Fallback sem ESX: usa ace permissions nativas do FiveM
+        -- Para dar permissão: add ace group.admin mist_ui.announce allow
+        return IsPlayerAceAllowed(tostring(src), "mist_ui.announce")
+    end
 end
 
 -- // /announce command \\ --
@@ -16,17 +48,16 @@ if sv_config.announce.enable then
 
         if src ~= 0 then
             if msg ~= nil and msg ~= "" then
-                local xPlayer = ESX.GetPlayerFromId(src)
-                if sv_config.announce.groups[xPlayer.getGroup()] then
+                if playerHasAnnouncePermission(src) then
                     TriggerClientEvent(cl_config.general.prime_events["prime_announce"], -1, "Announce", msg, sv_config.announce.time)
                 else
-                    TriggerClientEvent(cl_config.general.prime_events["prime_notify"], src, "error", "Mist Notify", language["announce"]["command"]["no_perms"], 5000)
+                    TriggerClientEvent(cl_config.general.prime_events["prime_notify"], src, "error", "Mist UI", language["announce"]["command"]["no_perms"], 5000)
                 end
             else
-                TriggerClientEvent(cl_config.general.prime_events["prime_notify"], src, "error", "Mist Notify", language["announce"]["command"]["no_value"], 5000)
+                TriggerClientEvent(cl_config.general.prime_events["prime_notify"], src, "error", "Mist UI", language["announce"]["command"]["no_value"], 5000)
             end
         else
-            -- chamada via consola/txAdmin
+            -- Chamada via consola/txAdmin — sempre permitida
             TriggerClientEvent(cl_config.general.prime_events["prime_announce"], -1, "Console", msg, sv_config.announce.time)
         end
     end)
@@ -50,4 +81,10 @@ if sv_config.general.txAdmin.enable then
     end)
 end
 
-print("^0[^5Mist-Notify^0] ^2Server started!^0")
+-- // Print \\ --
+if hasESX then
+    print("^0[^5Mist-UI^0] ^2Server started! ^7(ESX detected)^0")
+else
+    print("^0[^5Mist-UI^0] ^2Server started! ^3(No ESX — using ace permissions for /announce)^0")
+    print("^0[^5Mist-UI^0] ^3To grant /announce: add ace group.admin mist_ui.announce allow^0")
+end
