@@ -1,0 +1,19 @@
+@font-face {
+    font-family: "Collonse Bold";
+    src: url("../fonts/Collonse-Bold.ttf");
+}
+
+@font-face {
+    font-family: "Gilroy-Medium";
+    src: url("../fonts/Gilroy-Medium.ttf");
+}
+
+@font-face {
+    font-family: "Gilroy-SemiBold";
+    src: url("../fonts/Gilroy-Semibold.ttf");
+}
+
+@font-face {
+    font-family: "Gilroy-Bold";
+    src: url("../fonts/Gilroy-Bold.ttf");
+}
