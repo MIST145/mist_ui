@@ -4,18 +4,14 @@
 local ESX    = nil
 local hasESX = false
 
-local ok = pcall(function()
+pcall(function()
     ESX    = exports["es_extended"]:getSharedObject()
     hasESX = ESX ~= nil
 end)
 
 if not hasESX then
-    -- Fallback: tentar via evento (compatível com versões mais antigas de ESX)
+    -- Fallback: AddEventHandler para versões muito antigas de ESX que emitem o evento
     AddEventHandler(sv_config.general.esx_events["esx:getSharedObject"], function(obj)
-        ESX    = obj
-        hasESX = true
-    end)
-    TriggerEvent(sv_config.general.esx_events["esx:getSharedObject"], function(obj)
         ESX    = obj
         hasESX = true
     end)
