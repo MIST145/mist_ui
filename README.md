@@ -1,4 +1,4 @@
-# mist_notify
+# mist_ui
 
 Versão simplificada do prime_hud — mantém apenas:
 - `notify`
@@ -8,8 +8,8 @@ Versão simplificada do prime_hud — mantém apenas:
 
 ## Instalação
 
-1. Coloca a pasta `mist_notify` em `resources/`
-2. Adiciona `ensure mist_notify` ao teu `server.cfg`
+1. Coloca a pasta `mist_ui` em `resources/`
+2. Adiciona `ensure mist_ui` ao teu `server.cfg`
 3. Copia as tuas fonts para `html/assets/fonts/` (Collonse-Bold.ttf, Gilroy-*.ttf)
 4. Copia os teus sons para `html/assets/sounds/` (notify.mp3, announce_1.mp3)
 5. Copia o teu logo para `html/assets/img/logo.png`
@@ -19,26 +19,26 @@ Versão simplificada do prime_hud — mantém apenas:
 
 ```lua
 -- Notify
-exports["mist_notify"]:notify("info", "Título", "Mensagem", 5000)
-exports["mist_notify"]:notify("success", "Título", "Mensagem", 5000)
-exports["mist_notify"]:notify("error", "Título", "Mensagem", 5000)
-exports["mist_notify"]:notify("warning", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("info", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("success", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("error", "Título", "Mensagem", 5000)
+exports["mist_ui"]:notify("warning", "Título", "Mensagem", 5000)
 
 -- Progressbar
-exports["mist_notify"]:progressbar("A carregar...", 5000)
-exports["mist_notify"]:cancel_progressbar()
+exports["mist_ui"]:progressbar("A carregar...", 5000)
+exports["mist_ui"]:cancel_progressbar()
 
 -- Announce
-exports["mist_notify"]:announce("TÍTULO", "Mensagem do announce", 5000)
+exports["mist_ui"]:announce("TÍTULO", "Mensagem do announce", 5000)
 
 -- Help Notify (chamar num loop enquanto quiser mostrar)
-exports["mist_notify"]:helpnotify("E", "Para abrir a porta")
+exports["mist_ui"]:helpnotify("E", "Para abrir a porta")
 ```
 
 ## Eventos (alternativa aos exports)
 
 ```lua
-TriggerEvent("mist_notify",        "info", "Título", "Mensagem", 5000)
+TriggerEvent("mist_ui",        "info", "Título", "Mensagem", 5000)
 TriggerEvent("mist_progressbar",   "A carregar...", 5000)
 TriggerEvent("prime_progressbar:cancel")
 TriggerEvent("prime_announce",     "TÍTULO", "Mensagem", 5000)
